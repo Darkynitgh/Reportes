@@ -1,0 +1,53 @@
+<div class="dashboard-wrapper">
+  <div class="header">
+    <h1>Panel de Conversión</h1>
+    <p>Sube tu archivo Excel para generar un PDF</p>
+  </div>
+
+  <div class="upload-card">
+    <div class="upload-area" (click)="fileInput.click()">
+      <span class="upload-icon">📂</span>
+      <p>Haz clic para seleccionar un archivo</p>
+      <span class="upload-hint">.xlsx / .xls</span>
+    </div>
+    <input #fileInput type="file" accept=".xlsx,.xls" hidden (change)="onFileSelected($event)" />
+  </div>
+
+  @if (cargando) {
+    <div class="spinner-wrapper">
+      <div class="spinner"></div>
+      <p>Leyendo archivo...</p>
+    </div>
+  }
+
+  @if (headers.length > 0 && !cargando) {
+    <div class="tabla-card">
+      <div class="tabla-header">
+        <p class="archivo-nombre"> {{ archivoNombre }}</p>
+        <button class="btn-convertir" (click)="irAConfigurar()">
+          Configurar PDF 
+        </button>
+      </div>
+      <div class="tabla-scroll">
+        <table>
+          <thead>
+            <tr>
+              @for (h of headers; track h) {
+                <th>{{ h }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (fila of filas; track $index) {
+              <tr>
+                @for (celda of fila; track $index) {
+                  <td>{{ celda }}</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>

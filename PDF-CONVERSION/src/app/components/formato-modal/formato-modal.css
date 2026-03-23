@@ -1,0 +1,83 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+
+.modal h2 {
+  margin: 0 0 0.25rem;
+  color: #1a1a2e;
+  font-size: 1.3rem;
+}
+
+.subtitulo {
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.opciones {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.opcion {
+  flex: 1;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.opcion:hover {
+  border-color: #4f46e5;
+  background: #f5f3ff;
+}
+
+.icono {
+  font-size: 2rem;
+}
+
+.opcion h3 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.95rem;
+  color: #1a1a2e;
+}
+
+.opcion p {
+  font-size: 0.78rem;
+  color: #888;
+  margin: 0;
+}
+
+.btn-cancelar {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  color: #555;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+.btn-cancelar:hover {
+  background: #f5f5f5;
+}

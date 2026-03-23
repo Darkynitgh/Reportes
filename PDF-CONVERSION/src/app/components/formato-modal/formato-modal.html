@@ -1,0 +1,31 @@
+<div class="overlay" (click)="cerrar.emit()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <h2>Selecciona el formato de PDF</h2>
+    <p class="subtitulo">Elige cómo quieres visualizar tu información</p>
+
+    <div class="opciones">
+      <div class="opcion" (click)="elegir('simple')">
+        <span class="icono">📄</span>
+        <h3>Tabla Simple</h3>
+        <p>Vertical, todos los datos en una tabla limpia</p>
+      </div>
+      <div class="opcion" (click)="elegir('horizontal')">
+        <span class="icono">📋</span>
+        <h3>Tabla Horizontal</h3>
+        <p>Landscape, ideal para muchas columnas</p>
+      </div>
+      <div class="opcion" (click)="elegir('agrupado')">
+        <span class="icono">📊</span>
+        <h3>Agrupado</h3>
+        <p>Agrupa los datos por la primera columna</p>
+      </div>
+      <div class="opcion" (click)="elegir('kardex')">
+  <span class="icono">🗓️</span>
+  <h3>Kardex</h3>
+  <p>Lista de asistencia agrupada por departamento</p>
+</div>
+    </div>
+
+    <button class="btn-cancelar" (click)="cerrar.emit()">Cancelar</button>
+  </div>
+</div>

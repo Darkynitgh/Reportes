@@ -1,0 +1,212 @@
+<div class="pagina-wrapper">
+  <div class="config-panel">
+
+    <div class="config-header">
+      <button class="btn-back" (click)="router.navigate(['/dashboard'])">← Volver</button>
+      <h1>Configurar Reporte</h1>
+      <p>Selecciona las columnas y el rango de datos para generar tu PDF</p>
+    </div>
+
+    <div class="config-card">
+      <h3>Configuración general</h3>
+      <div class="campo">
+  <label>Tamaño de letra en tabla — {{ tamanoLetra === 0 ? 'Automático' : tamanoLetra + 'pt' }}</label>
+  <input type="range" min="0" max="12" step="1" [(ngModel)]="tamanoLetra" />
+</div>
+      <div class="fila-triple">
+        <div class="campo">
+          <label>Nombre de la empresa</label>
+          <input type="text" [(ngModel)]="nombreEmpresa"
+            placeholder="Ej. AKUMAL LEISURE GROUP"
+            (ngModelChange)="cdr.detectChanges()" />
+        </div>
+        <div class="campo">
+          <label>Fila de inicio de datos</label>
+          <input type="number" [(ngModel)]="filaInicio" min="1"
+            (ngModelChange)="onFilaInicioChange()" />
+        </div>
+        <div class="campo">
+          <label>Agrupar por columna</label>
+          <select [(ngModel)]="columnaAgrupacion">
+            @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
+              <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <div class="fila-doble">
+        <div class="campo">
+          <label>Orientación</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="orientacion" value="portrait" />
+              Vertical
+            </label>
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="orientacion" value="landscape" />
+              Horizontal
+            </label>
+          </div>
+        </div>
+        <div class="campo">
+          <label>Columna de comentarios</label>
+          <div class="toggle-wrapper">
+            <label class="toggle">
+              <input type="checkbox" [(ngModel)]="incluirComentarios" />
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label">{{ incluirComentarios ? 'Incluida al final' : 'No incluir' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-card">
+      <h3>Columnas a incluir</h3>
+      <p class="hint">Usa las flechas para reordenar. Haz clic para seleccionar o deseleccionar.</p>
+      <div class="chips">
+        @for (col of columnas; track col.indiceOriginal; let i = $index) {
+          <div class="chip" [class.activo]="col.seleccionada" (click)="toggleColumna(i)">
+            <div class="chip-controles">
+              <button class="btn-flecha" (click)="$event.stopPropagation(); moverColumna(i, -1)" [disabled]="i === 0">←</button>
+              <button class="btn-flecha" (click)="$event.stopPropagation(); moverColumna(i, 1)" [disabled]="i === columnas.length - 1">→</button>
+            </div>
+            <span class="chip-letra">{{ col.letra }}</span>
+            <span class="chip-nombre">{{ col.nombre }}</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="config-card">
+      <h3>Nomenclatura</h3>
+      @if (tieneNomenclaturaEnExcel) {
+        <p class="hint" style="color: #4f46e5; margin-bottom: 1rem;">
+           Nomenclatura detectada en el Excel
+        </p>
+        <p class="hint">Selecciona cuáles aparecerán en el PDF</p>
+        <div class="chips">
+          @for (item of nomenclaturaDetectada; track item.abrev; let i = $index) {
+            <div class="chip" [class.activo]="estaSeleccionadaNomenclatura(i)"
+              (click)="toggleNomenclatura(i)">
+              <span class="chip-letra">{{ item.abrev }}</span>
+              <span class="chip-nombre">{{ item.nombre }}</span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="toggle-wrapper" style="margin-bottom: 1rem;">
+          <label class="toggle">
+            <input type="checkbox" [(ngModel)]="usarNomenclaturaDefault"
+              (ngModelChange)="onToggleDefault()" />
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">Usar nomenclatura por defecto</span>
+        </div>
+        @if (usarNomenclaturaDefault) {
+          <p class="hint">Selecciona cuáles aparecerán en el PDF</p>
+          <div class="chips">
+            @for (item of nomenclaturaDetectada; track item.abrev; let i = $index) {
+              <div class="chip" [class.activo]="estaSeleccionadaNomenclatura(i)"
+                (click)="toggleNomenclatura(i)">
+                <span class="chip-letra">{{ item.abrev }}</span>
+                <span class="chip-nombre">{{ item.nombre }}</span>
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <div class="config-footer">
+      @if (!archivoTemp.archivo) {
+        <p class="advertencia"> No hay archivo cargado.</p>
+      }
+      <button class="btn-generar"
+        [disabled]="!camposValidos() || generando"
+        (click)="generarPdf()">
+        @if (generando) { Generando PDF... } @else { Generar PDF  }
+      </button>
+    </div>
+
+  </div>
+
+  <!-- PREVIEW PANEL -->
+  <div class="preview-panel">
+    <div class="preview-header">
+      <h3>Vista previa</h3>
+      <span class="preview-hint">Se actualiza automáticamente</span>
+    </div>
+    <div class="preview-contenido" [class.landscape]="orientacion === 'landscape'">
+
+      <!-- Encabezado -->
+      <div class="prev-titulo">
+        {{ nombreEmpresa ? 'REPORTE DE ASISTENCIA: ' + nombreEmpresa.toUpperCase() : 'REPORTE DE ASISTENCIA' }}
+      </div>
+      <div class="prev-periodo">
+        PERIODO: (detectado del Excel)
+      </div>
+
+      <!-- Nomenclatura -->
+      @if (nomenclaturaElegida().length > 0) {
+        <div class="prev-nomenclatura">
+          @for (item of nomenclaturaElegida(); track item.abrev) {
+            <span class="prev-nomenc-item">({{ item.abrev }}) {{ item.nombre }}</span>
+          }
+        </div>
+      }
+
+      <!-- Tabla -->
+      <div class="prev-tabla-wrapper">
+        <table class="prev-tabla">
+          <thead>
+            <tr>
+              @for (col of columnasSeleccionadasOrdenadas(); track col.indiceOriginal) {
+                <th>{{ abreviarTitulo(col.nombre) }}</th>
+              }
+              @if (incluirComentarios) {
+                <th>Comentarios</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (fila of filasPreview(); track $index) {
+              <tr>
+                @for (col of columnasSeleccionadasOrdenadas(); track col.indiceOriginal) {
+                  <td>{{ fila[col.indiceOriginal] }}</td>
+                }
+                @if (incluirComentarios) {
+                  <td></td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Firmas -->
+    <div class="prev-firmas">
+        <div class="prev-firma-linea">
+            <span>___________________</span>
+            <span>___________________</span>
+        </div>
+        <div class="prev-firma-nombres">
+            <span>JEFE DEPARTAMENTAL</span>
+            <span>GERENTE DE AREA</span>
+        </div>
+       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 4px;">
+        <div class="prev-obs-wrapper">
+            <span class="prev-obs">OBS: Por ser un documento Auditable por favor traer las firmas de Autorización. No usar Corrector y llenarlo en su totalidad
+            </span>
+        </div>
+        <div class="prev-fecha">
+            Página 1 &nbsp;&nbsp; Fecha Impresión: {{ fechaHoy() }}
+        </div>
+        </div>
+    </div>
+
+    </div>
+  </div>
+
+</div>
