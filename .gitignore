@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# .NET
+bin/
+obj/
+
+# Entorno
+.env
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+__pycache__/
+*.pyc
