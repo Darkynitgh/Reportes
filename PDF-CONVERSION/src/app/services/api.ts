@@ -19,6 +19,16 @@ export class ApiService {
       responseType: 'blob'
     });
   }
+  
+  combinarPdfs(blobs: Blob[]): Observable<Blob> {
+    const formData = new FormData();
+    blobs.forEach((blob, i) => {
+      formData.append('archivos', blob, `reporte_${i + 1}.pdf`);
+    });
+    return this.http.post(`${this.apiUrl}/combinar-pdfs`, formData, {
+      responseType: 'blob'
+    });
+  }
 
   generarPdfPersonalizado(formData: FormData): Observable<Blob> {
   return this.http.post(`${this.apiUrl}/generar-pdf`, formData, {

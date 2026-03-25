@@ -1,15 +1,28 @@
+import os
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Table, TableStyle, PageBreak, Paragraph, Spacer
 from reportlab.lib.pagesizes import letter, portrait, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet
-from datetime import date
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from datetime import date, datetime, timedelta
 import tempfile
 import pandas as pd
 import re
-from reportlab.platypus import Table, TableStyle, Paragraph
-from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.colors import HexColor, white, black
 
+def color_texto_contraste(hex_color):
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+
+    # luminancia
+    luminancia = (0.299*r + 0.587*g + 0.114*b)
+
+    return black if luminancia > 186 else white
 
 def truncar(texto, max_chars=12):
     texto = str(texto)
@@ -19,15 +32,10 @@ def procesar_marcacion(texto):
     if pd.isna(texto) or texto == "":
         return ""
     texto = str(texto).strip()
-
-    # Si es una fecha con hora (última marca, antigüedad) → fecha corta
     if re.match(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}', texto):
         return formatear_fecha_corta(texto)
-
-    # Si es solo fecha
     if re.match(r'^\d{4}-\d{2}-\d{2}$', texto):
         return formatear_fecha_corta(texto)
-
     partes = texto.split("|")
     nomenclatura = partes[0].strip()
     marcas = re.findall(r'\d{2}:\d{2}|\?|!', texto)
@@ -58,15 +66,12 @@ def formatear_fecha_corta(valor):
     if not valor or str(valor).strip() in ['', 'nan', 'NaT']:
         return ''
     texto = str(valor).strip()
-    # Intentar parsear fecha
-    from datetime import datetime
     for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y']:
         try:
             dt = datetime.strptime(texto[:19], fmt[:len(texto[:19])])
             return dt.strftime('%d/%m/%y')
         except:
             continue
-    # Si tiene formato con / o - solo tomar primeros 10 chars
     if re.match(r'\d{4}-\d{2}-\d{2}', texto):
         try:
             dt = datetime.strptime(texto[:10], '%Y-%m-%d')
@@ -81,7 +86,6 @@ def es_columna_fecha(encabezado):
 def formatear_encabezado_dia(encabezado):
     texto = str(encabezado).strip()
     if re.match(r'\d{4}-\d{2}-\d{2}', texto):
-        from datetime import datetime
         try:
             dt = datetime.strptime(texto[:10], '%Y-%m-%d')
             return f"{DIAS_SEMANA[dt.weekday()]}{dt.day:02d}"
@@ -91,7 +95,6 @@ def formatear_encabezado_dia(encabezado):
 
 def abreviar_encabezado(texto, max_chars=10):
     texto_str = str(texto)
-    # Si es fecha de día → Lu01, Ma02...
     if es_columna_fecha(texto_str):
         return formatear_encabezado_dia(texto_str)
     clave = texto_str.lower().strip()
@@ -99,32 +102,55 @@ def abreviar_encabezado(texto, max_chars=10):
         return ABREVIACIONES[clave]
     return texto_str[:max_chars] + '...' if len(texto_str) > max_chars else texto_str
 
-def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_agrupacion, nomenclatura, incluir_comentarios=False, nombre_empresa='REPORTE DE ASISTENCIA', tamano_letra=0):
+def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
+    columna_agrupacion, nomenclatura, incluir_comentarios=False,
+    nombre_empresa='REPORTE DE ASISTENCIA', tamano_letra=0,
+    tipo_periodo='ninguno', columna_agrupacion2=-1,filtro_agrupacion=None,
+    logo_path=None, posicion_logo='izquierda',color_titulo='#4f46e5',
+    color_encabezado='#4f46e5'):
+
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     pdf_path = tmp.name
     tmp.close()
 
-    # DETECTAR PERIODO
-    fecha_inicio = None
-    fecha_fin = None
-    for idx, row in df_raw.iterrows():
-        celda = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
-        fechas = re.findall(r"\d{4}-\d{2}-\d{2}", celda)
-        if len(fechas) >= 2:
-            from datetime import datetime
-            fecha_inicio = datetime.strptime(fechas[0], "%Y-%m-%d")
-            fecha_fin    = datetime.strptime(fechas[1], "%Y-%m-%d")
-            break
-
     # EXTRAER DATOS
-    # fila_inicio es 1-based, entonces encabezados están en fila_inicio - 1 (0-based)
-    # y datos desde fila_inicio (0-based)
     encabezados_raw = df_raw.iloc[fila_inicio - 1].tolist()
     datos_raw = df_raw.iloc[fila_inicio:].values.tolist()
 
-    # Limpiar encabezados nan
-    encabezados_raw = [str(v) if pd.notna(v) and str(v) != 'nan' else f'Col{i}' 
-                    for i, v in enumerate(encabezados_raw)]
+    encabezados_raw = [str(v) if pd.notna(v) and str(v) != 'nan' else f'Col{i}'
+                       for i, v in enumerate(encabezados_raw)]
+
+    # DETECTAR FECHAS EN ENCABEZADOS Y FILTRAR POR PERIODO
+    cols_fechas = []
+    for i, enc in enumerate(encabezados_raw):
+        if re.match(r'\d{2}/\d{2}/\d{4}', str(enc)) or re.match(r'\d{4}-\d{2}-\d{2}', str(enc)):
+            try:
+                if '/' in str(enc):
+                    dt = datetime.strptime(str(enc)[:10], '%d/%m/%Y')
+                else:
+                    dt = datetime.strptime(str(enc)[:10], '%Y-%m-%d')
+                cols_fechas.append((i, dt))
+            except:
+                pass
+
+    if tipo_periodo != 'ninguno' and cols_fechas:
+        fecha_min = min(cols_fechas, key=lambda x: x[1])[1]
+        if tipo_periodo == 'semana':
+            fecha_max = fecha_min + timedelta(days=6)
+            periodo_label = f"SEMANA: {fecha_min.strftime('%d/%m/%Y')} al {fecha_max.strftime('%d/%m/%Y')}"
+        else:
+            fecha_max = fecha_min + timedelta(days=14)
+            periodo_label = f"QUINCENA: {fecha_min.strftime('%d/%m/%Y')} al {fecha_max.strftime('%d/%m/%Y')}"
+        cols_a_excluir = {i for i, dt in cols_fechas if dt > fecha_max}
+        columnas = [c for c in columnas if c not in cols_a_excluir]
+    else:
+        if cols_fechas:
+            fecha_min = min(cols_fechas, key=lambda x: x[1])[1]
+            fecha_max = max(cols_fechas, key=lambda x: x[1])[1]
+            periodo_label = f"{fecha_min.strftime('%d/%m/%Y')} al {fecha_max.strftime('%d/%m/%Y')}"
+        else:
+            periodo_label = ""
+
     # FILTRAR COLUMNAS
     encabezados = [encabezados_raw[i] if i < len(encabezados_raw) else f'Col{i}' for i in columnas]
     datos = []
@@ -132,7 +158,7 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
         fila_filtrada = [procesar_marcacion(fila[i]) if i < len(fila) else '' for i in columnas]
         datos.append(fila_filtrada)
 
-    # INDICE DE COLUMNA AGRUPACION dentro de columnas filtradas
+    # INDICE AGRUPACION
     try:
         idx_agrupacion = columnas.index(columna_agrupacion)
     except ValueError:
@@ -144,10 +170,10 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
     margen = 0.5 * inch
     available_width = page_width - (margen * 2)
 
+    # TAMAÑO DE LETRA
     if tamano_letra and tamano_letra > 0:
         font_size = tamano_letra
     else:
-            # CALCULAR TAMAÑO DE LETRA AUTOMATICO
         num_cols = len(columnas)
         if num_cols <= 5:
             font_size = 9
@@ -160,9 +186,6 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
         else:
             font_size = 5
 
-        # Estilo para wrap en celdas
-    from reportlab.lib.enums import TA_CENTER
-
     estilo_celda = ParagraphStyle(
         'celda',
         fontSize=font_size,
@@ -171,25 +194,27 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
         alignment=TA_CENTER
     )
 
-   # ANCHOS DE COLUMNAS DINAMICOS BASADOS EN CONTENIDO
+    estilo_sin_wrap = ParagraphStyle(
+        'sin_wrap',
+        fontSize=font_size,
+        leading=font_size + 2,
+        alignment=TA_CENTER,
+        wordWrap=None
+    )
+
+    # ANCHOS DE COLUMNAS
     col_comentarios_ancho = 50 if incluir_comentarios else 0
     espacio_disponible = available_width - col_comentarios_ancho
 
-    # Calcular ancho mínimo por columna basado en contenido
-    from reportlab.pdfbase.pdfmetrics import stringWidth
-
-    def calcular_ancho_col(encabezado, datos_col, font_size):
-        # Ancho del encabezado
-        ancho_enc = stringWidth(str(encabezado), 'Helvetica-Bold', font_size) + 6
-        # Ancho del contenido más largo (primeras 20 filas)
+    def calcular_ancho_col(encabezado, datos_col, fs):
+        ancho_enc = stringWidth(str(encabezado), 'Helvetica-Bold', fs) + 6
         muestra = datos_col[:20]
         ancho_datos = max(
-            [stringWidth(str(v)[:15], 'Helvetica', font_size) + 6 for v in muestra if v]
+            [stringWidth(str(v)[:15], 'Helvetica', fs) + 6 for v in muestra if v]
             or [20]
         )
-        return max(ancho_enc, ancho_datos, 20)  # mínimo 20 puntos
+        return max(ancho_enc, ancho_datos, 20)
 
-    # Calcular anchos naturales por columna
     anchos_naturales = []
     for j, enc in enumerate(encabezados):
         enc_abrev = abreviar_encabezado(enc)
@@ -197,7 +222,6 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
         ancho = calcular_ancho_col(enc_abrev, datos_col, font_size)
         anchos_naturales.append(ancho)
 
-    # Escalar para que quepan en el espacio disponible
     total_natural = sum(anchos_naturales)
     if total_natural > espacio_disponible:
         factor = espacio_disponible / total_natural
@@ -207,7 +231,8 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
 
     if incluir_comentarios:
         col_widths.append(col_comentarios_ancho)
-   # NOMENCLATURA DESDE FRONTEND
+
+    # NOMENCLATURA
     if nomenclatura:
         items_nomenc = []
         for item in nomenclatura:
@@ -216,7 +241,6 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
             else:
                 items_nomenc.append(str(item))
 
-        # Distribuir en filas según cantidad
         total = len(items_nomenc)
         if total <= 7:
             cols_simb = total
@@ -239,7 +263,6 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
             while len(fila3) < len(fila1): fila3.append('')
             filas_simb = [fila1, fila2, fila3]
 
-        # Fuente automática según cantidad aqui se modifica el tamaño de Nomenclatura
         if total <= 7:
             font_simb = 6
         elif total <= 14:
@@ -252,12 +275,12 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
             colWidths=[available_width / cols_simb] * cols_simb
         )
         tabla_simbologia.setStyle(TableStyle([
-            ('FONTSIZE', (0,0), (-1,-1), font_simb),
-            ('ALIGN',    (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN',   (0,0), (-1,-1), 'MIDDLE'),
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('TOPPADDING',    (0,0), (-1,-1), 0),  
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),  
+            ('FONTSIZE',      (0,0), (-1,-1), font_simb),
+            ('ALIGN',         (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+            ('FONTNAME',      (0,0), (-1,-1), 'Helvetica'),
+            ('TOPPADDING',    (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
         ]))
     else:
         tabla_simbologia = None
@@ -267,23 +290,44 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
     # ENCABEZADO
     def dibujar_header(canvas, doc):
         canvas.saveState()
-        y_base = page_height - margen
+        y_base = page_height - margen - 5
 
         canvas.setFont("Helvetica-Bold", 10)
+        canvas.setFillColor(HexColor(color_titulo))
+
         titulo = f"REPORTE DE ASISTENCIA: {nombre_empresa.upper()}" if nombre_empresa else "REPORTE DE ASISTENCIA"
         canvas.drawCentredString(page_width / 2, y_base - 15, titulo)
 
-        if fecha_inicio and fecha_fin:
-            canvas.setFont("Helvetica", 9)
-            canvas.drawCentredString(page_width / 2, y_base - 27,
-                f"PERIODO: {fecha_inicio.strftime('%d/%m/%Y')} ==> {fecha_fin.strftime('%d/%m/%Y')}")
+        canvas.setFillColor(black)  # ← después de dibujar
+        canvas.drawCentredString(page_width / 2, y_base - 15, titulo)
+        
+        canvas.setFont("Helvetica", 9)
+
+        if logo_path and os.path.exists(logo_path):
+            from reportlab.lib.utils import ImageReader
+            try:
+                img = ImageReader(logo_path)
+                img_w, img_h = img.getSize()
+                alto_logo = 40
+                ancho_logo = (img_w / img_h) * alto_logo
+                if posicion_logo == 'izquierda':
+                    x_logo = margen
+                else:
+                    x_logo = page_width - margen - ancho_logo
+                y_logo = y_base - alto_logo
+                canvas.drawImage(logo_path, x_logo, y_logo,
+                                width=ancho_logo, height=alto_logo,
+                                preserveAspectRatio=True, mask='auto')
+            except:
+                pass
+        if periodo_label:
+            canvas.drawCentredString(page_width / 2, y_base - 27, f"PERIODO: {periodo_label}")
 
         if tabla_simbologia:
             w, h = tabla_simbologia.wrap(available_width, 0)
             x = (page_width - w) / 2
             tabla_simbologia.drawOn(canvas, x, y_base - 42 - h)
 
-       # FIRMAS CENTRADAS
         y_firma = margen + 20
         centro = page_width / 2
         largo = 150
@@ -297,12 +341,10 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
 
         canvas.drawString(margen, y_firma - 22,
             "OBS: Por ser un documento Auditable por favor traer las firmas de Autorización. No usar Corrector y llenarlo en su totalidad")
-        canvas.drawString(margen, y_firma - 32,
-            "")
         canvas.drawRightString(page_width - doc.rightMargin, y_firma - 25,
             f"Página {doc.page}   Fecha Impresión: {fecha_hoy.strftime('%d/%m/%Y')}")
         canvas.restoreState()
-    
+
     # CREAR PDF
     doc = BaseDocTemplate(
         pdf_path,
@@ -312,7 +354,7 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
         topMargin=margen,
         bottomMargin=margen
     )
-    #Se modifica el Margen entre lineas de la Nomenclatura y la Tabla
+
     frame = Frame(
         doc.leftMargin,
         doc.bottomMargin + 0.8 * inch,
@@ -323,76 +365,91 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas, columna_ag
     template = PageTemplate(id='header', frames=[frame], onPage=dibujar_header)
     doc.addPageTemplates([template])
 
-
     # AGRUPAR Y GENERAR
     df_final = pd.DataFrame(datos, columns=encabezados)
     df_final = df_final.reset_index(drop=True)
 
-    # Limpiar columna de agrupacion
     col_grupo = encabezados[idx_agrupacion]
     df_final[col_grupo] = df_final[col_grupo].astype(str).fillna('Sin grupo')
     df_final[col_grupo] = df_final[col_grupo].replace('nan', 'Sin grupo')
     df_final[col_grupo] = df_final[col_grupo].replace('', 'Sin grupo')
 
-    # Filtrar filas vacías sin boolean mask
-    indices_validos = [i for i, val in enumerate(df_final[col_grupo]) 
-                    if str(val).strip() not in ['', 'nan', 'Sin grupo']]
+    indices_validos = [i for i, val in enumerate(df_final[col_grupo])
+                       if str(val).strip() not in ['', 'nan', 'Sin grupo']]
     df_final = df_final.iloc[indices_validos].reset_index(drop=True)
 
     
-    grupos = list(df_final.groupby(col_grupo, sort=True))
+    # SEGUNDA AGRUPACION
+    tiene_agrupacion2 = columna_agrupacion2 >= 0 and columna_agrupacion2 != columna_agrupacion
+    if tiene_agrupacion2:
+        try:
+            idx_agrupacion2 = columnas.index(columna_agrupacion2)
+            col_grupo2 = encabezados[idx_agrupacion2]
+            df_final[col_grupo2] = df_final[col_grupo2].astype(str).fillna('Sin grupo')
+            df_final[col_grupo2] = df_final[col_grupo2].replace('nan', 'Sin grupo')
+
+            if filtro_agrupacion and isinstance(filtro_agrupacion, list):
+                df_final = df_final[df_final[col_grupo2].isin(filtro_agrupacion)].reset_index(drop=True)
+
+        except:
+            tiene_agrupacion2 = False
+
     elementos = []
-    styles = getSampleStyleSheet()
+    grupos_nivel1 = list(df_final.groupby(col_grupo, sort=True))
+    es_primer_tabla = True
 
-    for i, (grupo, filas_grupo) in enumerate(grupos):
-        encabezados_tabla = [abreviar_encabezado(e) for e in encabezados]
-        if incluir_comentarios:
-            encabezados_tabla.append('Comentarios')
+    for i, (grupo1, filas_grupo1) in enumerate(grupos_nivel1):
 
-        filas_tabla = []  # ← AGREGA ESTA LÍNEA
-        for fila in filas_grupo.values.tolist():
-            fila_datos = []
-            for j, v in enumerate(fila):
-                if v:
-                    # Primera columna (nombre) sin wrap
-                    if j == 0:
-                        estilo_sin_wrap = ParagraphStyle(
-                            'sin_wrap',
-                            fontSize=font_size,
-                            leading=font_size + 2,
-                            alignment=TA_CENTER,
-                            wordWrap=None
-                        )
-                        fila_datos.append(Paragraph(str(v), estilo_sin_wrap))
-                    else:
-                        fila_datos.append(Paragraph(str(v), estilo_celda))
-                else:
-                    fila_datos.append('')
+        if tiene_agrupacion2:
+            grupos_nivel2 = list(filas_grupo1.groupby(col_grupo2, sort=True))
+        else:
+            grupos_nivel2 = [(grupo1, filas_grupo1)]
+
+        for j, (grupo2, filas_grupo) in enumerate(grupos_nivel2):
+
+            encabezados_tabla = [abreviar_encabezado(e) for e in encabezados]
             if incluir_comentarios:
-                fila_datos.append('')
-            filas_tabla.append(fila_datos)
-            
+                encabezados_tabla.append('Comentarios')
 
-        data_grupo = [encabezados_tabla] + filas_tabla
-        tabla = Table(data_grupo, colWidths=col_widths, repeatRows=1, hAlign='CENTER')
-        tabla.setStyle(TableStyle([
-            ('FONTSIZE',      (0,0), (-1,-1),  font_size),
-            ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
-            ('FONTNAME',      (0,0), (-1, 0), 'Helvetica-Bold'),
-            ('BACKGROUND',    (0,0), (-1, 0), colors.HexColor("#ffffff")),
-            ('TEXTCOLOR',     (0,0), (-1, 0), colors.black),
-            ('LEADING',       (0,0), (-1,-1),  font_size + 1),
-            ('TOPPADDING',    (0,0), (-1,-1), 1),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-            ('LEFTPADDING',   (0,0), (-1,-1), 1),
-            ('RIGHTPADDING',  (0,0), (-1,-1), 1),
-            ('GRID',          (0,0), (-1,-1), 0.7, colors.black)
-        ]))
+            filas_tabla = []
+            for fila in filas_grupo.values.tolist():
+                fila_datos = []
+                for k, v in enumerate(fila):
+                    if v:
+                        if k == 0:
+                            fila_datos.append(Paragraph(str(v), estilo_sin_wrap))
+                        else:
+                            fila_datos.append(Paragraph(str(v), estilo_celda))
+                    else:
+                        fila_datos.append('')
+                if incluir_comentarios:
+                    fila_datos.append('')
+                filas_tabla.append(fila_datos)
 
-        elementos.append(tabla)
-        if i < len(grupos) - 1:
-            elementos.append(PageBreak())
+            data_grupo = [encabezados_tabla] + filas_tabla
+            tabla = Table(data_grupo, colWidths=col_widths, repeatRows=1, hAlign='CENTER')
+            color_fondo = HexColor(color_encabezado)
+            color_texto = color_texto_contraste(color_encabezado)
+            tabla.setStyle(TableStyle([
+                
+                ('FONTSIZE',      (0,0), (-1,-1), font_size),
+                ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+                ('FONTNAME',      (0,0), (-1, 0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,0), (-1, 0), color_fondo),
+                ('TEXTCOLOR', (0,0), (-1, 0), color_texto),
+                ('LEADING',       (0,0), (-1,-1), font_size + 1),
+                ('TOPPADDING',    (0,0), (-1,-1), 1),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ('LEFTPADDING',   (0,0), (-1,-1), 1),
+                ('RIGHTPADDING',  (0,0), (-1,-1), 1),
+                ('GRID',          (0,0), (-1,-1), 0.7, colors.black)
+            ]))
+
+            if not es_primer_tabla:
+                elementos.append(PageBreak())
+            elementos.append(tabla)
+            es_primer_tabla = False
 
     doc.build(elementos)
     return pdf_path

@@ -9,8 +9,7 @@ interface ColumnaItem {
   letra: string;
   nombre: string;
   indiceOriginal: number;
-  seleccionada: boolean;
-  
+  seleccionada: boolean; 
 }
 
 @Component({
@@ -29,10 +28,17 @@ export class ConfigurarPersonalizado implements OnInit {
   filaInicio = 23;
   orientacion: 'portrait' | 'landscape' = 'landscape';
   columnaAgrupacion = 0;
+  columnaAgrupacion2 = -1; // -1 = sin segunda agrupación
   generando = false;
   incluirComentarios = false;
   nombreEmpresa = ''; 
+  valoresAgrupacion: string[] = [];
+  valoresAgrupacionSeleccionados: boolean[] = [];
 
+   // Enfilamiento
+  enfilarPdfs = false;
+  colaPdfs: { nombre: string; blob: Blob }[] = [];
+  descargandoTodo = false;
   // Nomenclatura
   filaNomenclaturaInicio = 7;
   filaNomenclaturaFin = 20;
@@ -41,6 +47,16 @@ export class ConfigurarPersonalizado implements OnInit {
   usarNomenclaturaDefault = false;
   tieneNomenclaturaEnExcel = false;
   tamanoLetra = 0; 
+  tipoPeriodo: 'semana' | 'quincena' | 'ninguno' = 'ninguno';
+
+  // Logo
+  logoArchivo: File | null = null;
+  logoPreview: string | null = null;
+  posicionLogo: 'izquierda' | 'derecha' = 'izquierda';
+
+  colorTitulo: string = '#4f46e5';
+  colorEncabezado: string = '#4f46e5';
+  
 
   readonly NOMENCLATURA_DEFAULT = [
     { nombre: 'Descanso', abrev: 'D' },
@@ -73,6 +89,7 @@ export class ConfigurarPersonalizado implements OnInit {
       this.archivoNombre = state.archivoNombre;
       this.inicializarColumnas();
       this.detectarNomenclatura();
+      this.detectarValoresAgrupacion();
     }
   }
 
@@ -116,11 +133,69 @@ export class ConfigurarPersonalizado implements OnInit {
     }));
   }
 
-  onFilaInicioChange() {
-    this.inicializarColumnas();
+    onLogoSeleccionado(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    if (!file.type.includes('png')) {
+      alert('Solo se permiten archivos PNG');
+      return;
+    }
+    this.logoArchivo = file;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      this.logoPreview = e.target?.result as string;
+      this.cdr.detectChanges();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  eliminarLogo() {
+    this.logoArchivo = null;
+    this.logoPreview = null;
     this.cdr.detectChanges();
   }
 
+  onFilaInicioChange() {
+    this.inicializarColumnas();
+    this.cdr.detectChanges();
+    this.cdr.detectChanges();
+  }
+
+    detectarValoresAgrupacion() {
+    const columnaParaFiltrar = this.columnaAgrupacion2 >= 0 
+      ? this.columnaAgrupacion2 
+      : this.columnaAgrupacion;
+
+    if (columnaParaFiltrar < 0) {
+      this.valoresAgrupacion = [];
+      this.valoresAgrupacionSeleccionados = [];
+      return;
+      }
+
+      const filaIdx = this.filaInicio;
+      const filasData = this.filas.slice(filaIdx);
+      const valoresUnicos = new Set<string>();
+
+      for (const fila of filasData) {
+        const val = fila[columnaParaFiltrar];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          valoresUnicos.add(String(val).trim());
+        }
+      }
+
+      this.valoresAgrupacion = Array.from(valoresUnicos).sort();
+      this.valoresAgrupacionSeleccionados = this.valoresAgrupacion.map(() => true);
+      this.cdr.detectChanges();
+    }
+
+  toggleValorAgrupacion(i: number) {
+    this.valoresAgrupacionSeleccionados[i] = !this.valoresAgrupacionSeleccionados[i];
+  }
+
+  valoresAgrupacionElegidos(): string[] {
+    return this.valoresAgrupacion.filter((_, i) => this.valoresAgrupacionSeleccionados[i]);
+  }
   moverColumna(index: number, direccion: number) {
     const nuevaPos = index + direccion;
     if (nuevaPos < 0 || nuevaPos >= this.columnas.length) return;
@@ -219,38 +294,105 @@ export class ConfigurarPersonalizado implements OnInit {
   }
 
   generarPdf() {
-    if (!this.camposValidos()) return;
-    this.generando = true;
-    this.cdr.detectChanges();
+  if (!this.camposValidos()) return;
+  this.generando = true;
+  this.cdr.detectChanges();
 
-    const formData = new FormData();
-    formData.append('archivo', this.archivoTemp.archivo!);
-    formData.append('formato', 'personalizado');
-    formData.append('fila_inicio', String(this.filaInicio));
-    formData.append('orientacion', this.orientacion);
-    formData.append('columnas', JSON.stringify(this.columnasElegidas()));
-    formData.append('columna_agrupacion', String(this.columnaAgrupacion));
-    formData.append('nomenclatura', JSON.stringify(this.nomenclaturaElegida()));
-    formData.append('incluir_comentarios', String(this.incluirComentarios));
-    formData.append('nombre_empresa', this.nombreEmpresa);
-    formData.append('tamano_letra', String(this.tamanoLetra));
+  const formData = new FormData();
+  formData.append('archivo', this.archivoTemp.archivo!);
+  formData.append('formato', 'personalizado');
+  formData.append('fila_inicio', String(this.filaInicio));
+  formData.append('orientacion', this.orientacion);
+  formData.append('columnas', JSON.stringify(this.columnasElegidas()));
+  formData.append('columna_agrupacion', String(this.columnaAgrupacion));
+  formData.append('nomenclatura', JSON.stringify(this.nomenclaturaElegida()));
+  formData.append('incluir_comentarios', String(this.incluirComentarios));
+  formData.append('nombre_empresa', this.nombreEmpresa);
+  formData.append('tamano_letra', String(this.tamanoLetra));
+  formData.append('tipo_periodo', this.tipoPeriodo);
+  formData.append('columna_agrupacion2', String(this.columnaAgrupacion2));
+  formData.append('filtro_agrupacion', JSON.stringify(this.valoresAgrupacionElegidos()));
+  formData.append('color_titulo', this.colorTitulo);
+  formData.append('color_encabezado', this.colorEncabezado);
 
-    this.apiService.generarPdfPersonalizado(formData).subscribe({
-      next: (blob) => {
+  if (this.logoArchivo) {
+  formData.append('logo', this.logoArchivo);
+  } 
+  formData.append('posicion_logo', this.posicionLogo);
+  this.apiService.generarPdfPersonalizado(formData).subscribe({
+    next: (blob) => {
+      if (this.enfilarPdfs) {
+        // Guardar en cola
+        const nombre = this.nombreEmpresa
+          ? `${this.nombreEmpresa}_reporte.pdf`
+          : `${this.archivoNombre}_reporte.pdf`;
+        this.colaPdfs.push({ nombre, blob });
+      } else {
+        // Descargar directo como antes
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${this.archivoNombre}_reporte.pdf`;
         link.click();
         window.URL.revokeObjectURL(url);
-        this.generando = false;
+      }
+      this.generando = false;
+      this.cdr.detectChanges();
+    },
+    error: (err) => {
+      console.error('Error:', err);
+      this.generando = false;
+      this.cdr.detectChanges();
+    }
+  });
+}
+
+  descargarTodo() {
+    if (this.colaPdfs.length === 0) return;
+    this.descargandoTodo = true;
+    this.cdr.detectChanges();
+    
+    const blobs = this.colaPdfs.map(p => p.blob);
+    
+    this.apiService.combinarPdfs(blobs).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'reporte_completo.pdf';
+        link.click();
+        window.URL.revokeObjectURL(url);
+        this.colaPdfs = [];
+        this.descargandoTodo = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Error:', err);
-        this.generando = false;
+        this.descargandoTodo = false;
         this.cdr.detectChanges();
       }
     });
+  }
+  getColorContraste(hex: string): string {
+    if (!hex) return '#000000';
+
+    const r = parseInt(hex.substring(1, 3), 16);
+    const g = parseInt(hex.substring(3, 5), 16);
+    const b = parseInt(hex.substring(5, 7), 16);
+
+    const luminancia = (0.299 * r + 0.587 * g + 0.114 * b);
+
+    return luminancia > 186 ? '#000000' : '#ffffff';
+  }
+
+  getFontSizePreview(): string {
+    if (!this.tamanoLetra || this.tamanoLetra === 0) {
+      return '12px'; // automático visual
+    }
+    return this.tamanoLetra + 'px';
+  }
+
+  eliminarDeCola(i: number) {
+    this.colaPdfs.splice(i, 1);
   }
 }

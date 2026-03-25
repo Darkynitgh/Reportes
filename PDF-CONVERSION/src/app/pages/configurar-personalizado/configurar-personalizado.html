@@ -21,17 +21,93 @@
             (ngModelChange)="cdr.detectChanges()" />
         </div>
         <div class="campo">
+        <label>Logo (PNG)</label>
+        @if (!logoPreview) {
+          <label class="btn-subir-logo">
+            Subir logo
+            <input type="file" accept=".png" (change)="onLogoSeleccionado($event)" hidden />
+          </label>
+        } @else {
+          <div class="logo-preview-wrapper">
+            <img [src]="logoPreview" class="logo-preview" />
+            <button class="btn-eliminar-logo" (click)="eliminarLogo()">✕ Quitar</button>
+          </div>
+          <div class="radio-group" style="margin-top: 0.5rem;">
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="posicionLogo" value="izquierda" />
+              Izquierda
+            </label>
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="posicionLogo" value="derecha" />
+              Derecha
+            </label>
+          </div>
+        }
+      </div>
+
+      <div class="campo">
+      <label>Color del título</label>
+      <input type="color" [(ngModel)]="colorTitulo" />
+      </div>
+
+      <div class="campo">
+        <label>Color encabezado tabla</label>
+        <input type="color" [(ngModel)]="colorEncabezado" />
+      </div>
+        <div class="campo">
           <label>Fila de inicio de datos</label>
           <input type="number" [(ngModel)]="filaInicio" min="1"
             (ngModelChange)="onFilaInicioChange()" />
         </div>
         <div class="campo">
+      <label>Tipo de periodo</label>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" [(ngModel)]="tipoPeriodo" value="ninguno" />
+          Sin filtro
+        </label>
+        <label class="radio-option">
+          <input type="radio" [(ngModel)]="tipoPeriodo" value="semana" />
+          Semana (7 días)
+        </label>
+        <label class="radio-option">
+          <input type="radio" [(ngModel)]="tipoPeriodo" value="quincena" />
+          Quincena (15 días)
+        </label>
+      </div>
+    </div>
+        <div class="campo">
           <label>Agrupar por columna</label>
-          <select [(ngModel)]="columnaAgrupacion">
+         <select [(ngModel)]="columnaAgrupacion" (ngModelChange)="detectarValoresAgrupacion()">
             @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
               <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
             }
           </select>
+        </div>
+          <div class="campo">
+          <label>Agrupar también por (opcional)</label>
+         <select [(ngModel)]="columnaAgrupacion2" (ngModelChange)="detectarValoresAgrupacion()">
+          <option [ngValue]="-1">— Sin segunda agrupación —</option>
+          @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
+            <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
+          }
+        </select>
+
+      @if (valoresAgrupacion.length > 0) {
+          <div class="campo">
+            <label>Filtrar grupos a incluir</label>
+            <p class="hint">Deselecciona los que no quieres en el PDF</p>
+            <div class="chips">
+              @for (val of valoresAgrupacion; track val; let i = $index) {
+                <div class="chip" [class.activo]="valoresAgrupacionSeleccionados[i]"
+                  (click)="toggleValorAgrupacion(i)">
+                  <span class="chip-nombre">{{ val }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+            
         </div>
       </div>
 
@@ -119,16 +195,50 @@
       }
     </div>
 
-    <div class="config-footer">
-      @if (!archivoTemp.archivo) {
-        <p class="advertencia"> No hay archivo cargado.</p>
-      }
-      <button class="btn-generar"
-        [disabled]="!camposValidos() || generando"
-        (click)="generarPdf()">
-        @if (generando) { Generando PDF... } @else { Generar PDF  }
-      </button>
+      <div class="config-footer">
+    @if (!archivoTemp.archivo) {
+      <p class="advertencia">No hay archivo cargado.</p>
+    }
+
+    <!-- Toggle enfilar -->
+    <div class="toggle-wrapper" style="margin-bottom: 1rem;">
+      <label class="toggle">
+        <input type="checkbox" [(ngModel)]="enfilarPdfs" />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">{{ enfilarPdfs ? 'Modo cola activado' : 'Descargar directo' }}</span>
     </div>
+
+    <button class="btn-generar"
+      [disabled]="!camposValidos() || generando"
+      (click)="generarPdf()">
+      @if (generando) {
+        Generando PDF...
+      } @else if (enfilarPdfs) {
+        Agregar a cola  
+      } @else {
+        Generar PDF 
+      }
+    </button>
+
+    <!-- Cola de PDFs -->
+    @if (colaPdfs.length > 0) {
+      <div class="cola-pdfs">
+        <h4>Cola de PDFs ({{ colaPdfs.length }})</h4>
+        @for (item of colaPdfs; track $index; let i = $index) {
+          <div class="cola-item">
+            <span>📄 {{ item.nombre }}</span>
+            <button class="btn-eliminar-cola" (click)="eliminarDeCola(i)">✕</button>
+          </div>
+        }
+        <button class="btn-descargar-todo"
+          [disabled]="descargandoTodo"
+          (click)="descargarTodo()">
+          @if (descargandoTodo) { Combinando... } @else { Descargar todo como un PDF }
+        </button>
+      </div>
+    }
+  </div>
 
   </div>
 
@@ -141,13 +251,21 @@
     <div class="preview-contenido" [class.landscape]="orientacion === 'landscape'">
 
       <!-- Encabezado -->
-      <div class="prev-titulo">
+      <div class="prev-titulo"
+      
+     [style.color]="colorTitulo">
+     
         {{ nombreEmpresa ? 'REPORTE DE ASISTENCIA: ' + nombreEmpresa.toUpperCase() : 'REPORTE DE ASISTENCIA' }}
       </div>
       <div class="prev-periodo">
         PERIODO: (detectado del Excel)
       </div>
-
+        @if (logoPreview) {
+      <div style="display: flex;"
+          [style.justify-content]="posicionLogo === 'izquierda' ? 'flex-start' : 'flex-end'">
+        <img [src]="logoPreview" style="height: 40px; margin-bottom: 5px;" />
+      </div>
+      }
       <!-- Nomenclatura -->
       @if (nomenclaturaElegida().length > 0) {
         <div class="prev-nomenclatura">
@@ -159,11 +277,16 @@
 
       <!-- Tabla -->
       <div class="prev-tabla-wrapper">
-        <table class="prev-tabla">
+        <table class="prev-tabla"
+       [style.fontSize]="getFontSizePreview()">
           <thead>
             <tr>
               @for (col of columnasSeleccionadasOrdenadas(); track col.indiceOriginal) {
-                <th>{{ abreviarTitulo(col.nombre) }}</th>
+               <th
+                [style.background]="colorEncabezado"
+                [style.color]="getColorContraste(colorEncabezado)">
+                {{ abreviarTitulo(col.nombre) }}
+              </th>
               }
               @if (incluirComentarios) {
                 <th>Comentarios</th>

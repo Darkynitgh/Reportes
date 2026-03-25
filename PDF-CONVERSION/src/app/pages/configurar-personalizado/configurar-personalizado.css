@@ -463,3 +463,87 @@
   color: #888;
   text-align: center;
 }
+
+.cola-pdfs {
+  margin-top: 1rem;
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.cola-pdfs h4 {
+  margin: 0 0 0.75rem;
+  color: #4f46e5;
+  font-size: 0.9rem;
+}
+
+.cola-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  background: white;
+  border-radius: 6px;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.btn-eliminar-cola {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-descargar-todo {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem;
+  background: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.btn-descargar-todo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-subir-logo {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #ede9fe;
+  color: #4f46e5;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px dashed #a78bfa;
+}
+
+.logo-preview-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-preview {
+  height: 48px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.btn-eliminar-logo {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
