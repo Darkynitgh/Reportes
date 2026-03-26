@@ -13,10 +13,12 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.post("/generar-pdf")
 async def generar_pdf(
@@ -25,14 +27,12 @@ async def generar_pdf(
     fila_inicio: int = Form(None),
     orientacion: str = Form(None),
     columnas: str = Form(None),
-    columna_agrupacion: int = Form(None),
     nomenclatura: str = Form(None),
+    agrupaciones: str = Form(None),
     incluir_comentarios: str = Form(None),
     nombre_empresa: str = Form(None),
     tamano_letra: int = Form(None),
     tipo_periodo: str = Form(None),
-    columna_agrupacion2: int = Form(None),
-    filtro_agrupacion: str = Form(None),
     logo: UploadFile = File(None),
     posicion_logo: str = Form(None),
     color_titulo: str = Form('#4f46e5'),
@@ -47,6 +47,14 @@ async def generar_pdf(
     df = pd.read_excel(tmp_path, header=None)
     os.unlink(tmp_path)
 
+    # Procesar logo si viene
+    logo_path = None
+    if logo:
+        contenido_logo = await logo.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
+            tmp_logo.write(contenido_logo)
+            logo_path = tmp_logo.name
+
     if formato == "kardex":
         df_normal = df.copy()
         df_normal.columns = df_normal.iloc[0]
@@ -58,48 +66,31 @@ async def generar_pdf(
         nomenc = json.loads(nomenclatura) if nomenclatura else []
         comentarios = incluir_comentarios == 'true'
         fila_inicio_val = fila_inicio if fila_inicio else 23
-        filtro_agrup = json.loads(filtro_agrupacion) if filtro_agrupacion else []
+        agrupaciones_list = json.loads(agrupaciones) if agrupaciones else []
+
+        
         pdf_path = generar_personalizado(
             df,
             fila_inicio_val,
             orientacion,
             cols,
-            columna_agrupacion or 0,
+            agrupaciones_list,      # <-- nuevo
             nomenc,
             comentarios,
             nombre_empresa or 'REPORTE DE ASISTENCIA',
             tamano_letra or 0,
             tipo_periodo or 'ninguno',
-            columna_agrupacion2 if columna_agrupacion2 is not None else -1,
-            filtro_agrup,
-            color_titulo,
-            color_encabezado
-            
+            logo_path,
+            posicion_logo or 'izquierda',
+            color_titulo or '#4f46e5',
+            color_encabezado or '#4f46e5'
         )
-        logo_path = None
-    if logo:
-        contenido_logo = await logo.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
-            tmp_logo.write(contenido_logo)
-            logo_path = tmp_logo.name
-
-    pdf_path = generar_personalizado(
-        df, fila_inicio_val, orientacion, cols,
-        columna_agrupacion or 0, nomenc, comentarios,
-        nombre_empresa or 'REPORTE DE ASISTENCIA',
-        tamano_letra or 0, tipo_periodo or 'ninguno',
-        columna_agrupacion2 if columna_agrupacion2 is not None else -1,
-        filtro_agrup,
-        logo_path,
-        posicion_logo or 'izquierda',
-        color_titulo='#4f46e5',
-        color_encabezado='#4f46e5'
-    )
-
-    if logo_path and os.path.exists(logo_path):
-        os.unlink(logo_path)
     else:
         return {"error": "Formato no válido"}
+
+    # Limpiar logo temporal
+    if logo_path and os.path.exists(logo_path):
+        os.unlink(logo_path)
 
     return FileResponse(
         pdf_path,

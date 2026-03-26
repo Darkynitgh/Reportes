@@ -18,10 +18,7 @@ def color_texto_contraste(hex_color):
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
-
-    # luminancia
     luminancia = (0.299*r + 0.587*g + 0.114*b)
-
     return black if luminancia > 186 else white
 
 def truncar(texto, max_chars=12):
@@ -88,7 +85,7 @@ def formatear_encabezado_dia(encabezado):
     if re.match(r'\d{4}-\d{2}-\d{2}', texto):
         try:
             dt = datetime.strptime(texto[:10], '%Y-%m-%d')
-            return f"{DIAS_SEMANA[dt.weekday()]}{dt.day:02d}"
+            return f"{DIAS_SEMANA[dt.weekday()]} {dt.day:02d}" 
         except:
             pass
     return encabezado
@@ -102,12 +99,12 @@ def abreviar_encabezado(texto, max_chars=10):
         return ABREVIACIONES[clave]
     return texto_str[:max_chars] + '...' if len(texto_str) > max_chars else texto_str
 
+# Nueva firma — elimina columna_agrupacion, columna_agrupacion2, filtro_agrupacion
 def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
-    columna_agrupacion, nomenclatura, incluir_comentarios=False,
+    agrupaciones, nomenclatura, incluir_comentarios=False,
     nombre_empresa='REPORTE DE ASISTENCIA', tamano_letra=0,
-    tipo_periodo='ninguno', columna_agrupacion2=-1,filtro_agrupacion=None,
-    logo_path=None, posicion_logo='izquierda',color_titulo='#4f46e5',
-    color_encabezado='#4f46e5'):
+    tipo_periodo='ninguno', logo_path=None, posicion_logo='izquierda',
+    color_titulo='#4f46e5', color_encabezado='#4f46e5'):
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     pdf_path = tmp.name
@@ -133,16 +130,36 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
             except:
                 pass
 
-    if tipo_periodo != 'ninguno' and cols_fechas:
-        fecha_min = min(cols_fechas, key=lambda x: x[1])[1]
-        if tipo_periodo == 'semana':
-            fecha_max = fecha_min + timedelta(days=6)
-            periodo_label = f"SEMANA: {fecha_min.strftime('%d/%m/%Y')} al {fecha_max.strftime('%d/%m/%Y')}"
-        else:
-            fecha_max = fecha_min + timedelta(days=14)
-            periodo_label = f"QUINCENA: {fecha_min.strftime('%d/%m/%Y')} al {fecha_max.strftime('%d/%m/%Y')}"
-        cols_a_excluir = {i for i, dt in cols_fechas if dt > fecha_max}
-        columnas = [c for c in columnas if c not in cols_a_excluir]
+        if tipo_periodo != 'ninguno' and cols_fechas:
+            fecha_min = min(cols_fechas, key=lambda x: x[1])[1]
+
+            if tipo_periodo == 'semana':
+                fecha_inicio = fecha_min
+                fecha_fin = fecha_min + timedelta(days=6)
+                periodo_label = f"SEMANA: {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+
+            elif tipo_periodo == 'quincena':
+                fecha_inicio = fecha_min
+                fecha_fin = fecha_min + timedelta(days=14)
+                periodo_label = f"QUINCENA: {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+
+            elif tipo_periodo == 'quincena_1':
+                fecha_inicio = fecha_min
+                fecha_fin = fecha_min + timedelta(days=6)
+                periodo_label = f"1ª SEMANA: {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+
+            elif tipo_periodo == 'quincena_2':
+                fecha_inicio = fecha_min + timedelta(days=7)
+                fecha_fin = fecha_min + timedelta(days=14)
+                periodo_label = f"2ª SEMANA: {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+
+            
+            cols_a_excluir = {
+                i for i, dt in cols_fechas
+                if dt < fecha_inicio or dt > fecha_fin
+            }
+
+            columnas = [c for c in columnas if c not in cols_a_excluir]
     else:
         if cols_fechas:
             fecha_min = min(cols_fechas, key=lambda x: x[1])[1]
@@ -157,12 +174,6 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
     for fila in datos_raw:
         fila_filtrada = [procesar_marcacion(fila[i]) if i < len(fila) else '' for i in columnas]
         datos.append(fila_filtrada)
-
-    # INDICE AGRUPACION
-    try:
-        idx_agrupacion = columnas.index(columna_agrupacion)
-    except ValueError:
-        idx_agrupacion = 0
 
     # CONFIGURACION PAGINA
     pagesize = landscape(letter) if orientacion == 'landscape' else portrait(letter)
@@ -210,17 +221,20 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
         ancho_enc = stringWidth(str(encabezado), 'Helvetica-Bold', fs) + 6
         muestra = datos_col[:20]
         ancho_datos = max(
-            [stringWidth(str(v)[:15], 'Helvetica', fs) + 6 for v in muestra if v]
+            [stringWidth(str(v)[:30], 'Helvetica', fs) + 8 for v in muestra if v]
             or [20]
         )
-        return max(ancho_enc, ancho_datos, 20)
+        return max(ancho_enc, ancho_datos, 30)
 
     anchos_naturales = []
     for j, enc in enumerate(encabezados):
         enc_abrev = abreviar_encabezado(enc)
         datos_col = [fila[j] if j < len(fila) else '' for fila in datos[:20]]
         ancho = calcular_ancho_col(enc_abrev, datos_col, font_size)
+        if "Nombre" in str(enc).lower():
+            ancho = ancho * 1.9
         anchos_naturales.append(ancho)
+        
 
     total_natural = sum(anchos_naturales)
     if total_natural > espacio_disponible:
@@ -294,13 +308,11 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
 
         canvas.setFont("Helvetica-Bold", 10)
         canvas.setFillColor(HexColor(color_titulo))
-
         titulo = f"REPORTE DE ASISTENCIA: {nombre_empresa.upper()}" if nombre_empresa else "REPORTE DE ASISTENCIA"
         canvas.drawCentredString(page_width / 2, y_base - 15, titulo)
-
-        canvas.setFillColor(black)  # ← después de dibujar
+        canvas.setFillColor(black)
         canvas.drawCentredString(page_width / 2, y_base - 15, titulo)
-        
+
         canvas.setFont("Helvetica", 9)
 
         if logo_path and os.path.exists(logo_path):
@@ -320,6 +332,7 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
                                 preserveAspectRatio=True, mask='auto')
             except:
                 pass
+
         if periodo_label:
             canvas.drawCentredString(page_width / 2, y_base - 27, f"PERIODO: {periodo_label}")
 
@@ -365,79 +378,73 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
     template = PageTemplate(id='header', frames=[frame], onPage=dibujar_header)
     doc.addPageTemplates([template])
 
-    # AGRUPAR Y GENERAR
+    # Reemplaza todo el bloque "AGRUPAR Y GENERAR" por esto:
+
     df_final = pd.DataFrame(datos, columns=encabezados)
     df_final = df_final.reset_index(drop=True)
 
-    col_grupo = encabezados[idx_agrupacion]
-    df_final[col_grupo] = df_final[col_grupo].astype(str).fillna('Sin grupo')
-    df_final[col_grupo] = df_final[col_grupo].replace('nan', 'Sin grupo')
-    df_final[col_grupo] = df_final[col_grupo].replace('', 'Sin grupo')
-
-    indices_validos = [i for i, val in enumerate(df_final[col_grupo])
-                       if str(val).strip() not in ['', 'nan', 'Sin grupo']]
-    df_final = df_final.iloc[indices_validos].reset_index(drop=True)
-
-    
-    # SEGUNDA AGRUPACION
-    tiene_agrupacion2 = columna_agrupacion2 >= 0 and columna_agrupacion2 != columna_agrupacion
-    if tiene_agrupacion2:
+    # Construir lista de columnas de agrupacion con sus filtros
+    niveles = []
+    for agrup in agrupaciones:
+        col_idx = agrup.get('columna', 0)
+        filtro = agrup.get('filtro', [])
         try:
-            idx_agrupacion2 = columnas.index(columna_agrupacion2)
-            col_grupo2 = encabezados[idx_agrupacion2]
-            df_final[col_grupo2] = df_final[col_grupo2].astype(str).fillna('Sin grupo')
-            df_final[col_grupo2] = df_final[col_grupo2].replace('nan', 'Sin grupo')
+            idx_en_encabezados = columnas.index(col_idx)
+            nombre_col = encabezados[idx_en_encabezados]
+            niveles.append({
+                'col': nombre_col,
+                'filtro': [str(f).strip() for f in filtro] if filtro else []
+            })
+        except ValueError as e:
+            continue
 
-            if filtro_agrupacion and isinstance(filtro_agrupacion, list):
-                df_final = df_final[df_final[col_grupo2].isin(filtro_agrupacion)].reset_index(drop=True)
+    # Normalizar columnas de agrupacion
+    for nivel in niveles:
+        col = nivel['col']
+        df_final[col] = df_final[col].apply(lambda x: str(x).strip())
+        df_final[col] = df_final[col].replace({'nan': 'Sin grupo', '': 'Sin grupo'})
 
-        except:
-            tiene_agrupacion2 = False
+    # Aplicar filtros de cada nivel
+    for nivel in niveles:
+        if nivel['filtro']:
+            df_final = df_final[df_final[nivel['col']].isin(nivel['filtro'])]
 
-    elementos = []
-    grupos_nivel1 = list(df_final.groupby(col_grupo, sort=True))
-    es_primer_tabla = True
+    df_final = df_final.reset_index(drop=True)
 
-    for i, (grupo1, filas_grupo1) in enumerate(grupos_nivel1):
+        # Funcion recursiva para agrupar y generar tablas
+    def generar_tablas(df, niveles_restantes, profundidad=0):
+        if df.empty:
+            return
 
-        if tiene_agrupacion2:
-            grupos_nivel2 = list(filas_grupo1.groupby(col_grupo2, sort=True))
-        else:
-            grupos_nivel2 = [(grupo1, filas_grupo1)]
-
-        for j, (grupo2, filas_grupo) in enumerate(grupos_nivel2):
-
+        if not niveles_restantes:
             encabezados_tabla = [abreviar_encabezado(e) for e in encabezados]
             if incluir_comentarios:
                 encabezados_tabla.append('Comentarios')
 
             filas_tabla = []
-            for fila in filas_grupo.values.tolist():
+            for fila in df.values.tolist():
                 fila_datos = []
                 for k, v in enumerate(fila):
                     if v:
-                        if k == 0:
-                            fila_datos.append(Paragraph(str(v), estilo_sin_wrap))
-                        else:
-                            fila_datos.append(Paragraph(str(v), estilo_celda))
+                        estilo = estilo_sin_wrap if k == 0 else estilo_celda
+                        fila_datos.append(Paragraph(str(v), estilo))
                     else:
                         fila_datos.append('')
                 if incluir_comentarios:
                     fila_datos.append('')
                 filas_tabla.append(fila_datos)
 
-            data_grupo = [encabezados_tabla] + filas_tabla
-            tabla = Table(data_grupo, colWidths=col_widths, repeatRows=1, hAlign='CENTER')
+            data_tabla = [encabezados_tabla] + filas_tabla
+            tabla = Table(data_tabla, colWidths=col_widths, repeatRows=1, hAlign='CENTER')
             color_fondo = HexColor(color_encabezado)
-            color_texto = color_texto_contraste(color_encabezado)
+            color_texto_enc = color_texto_contraste(color_encabezado)
             tabla.setStyle(TableStyle([
-                
                 ('FONTSIZE',      (0,0), (-1,-1), font_size),
                 ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
                 ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
                 ('FONTNAME',      (0,0), (-1, 0), 'Helvetica-Bold'),
-                ('BACKGROUND', (0,0), (-1, 0), color_fondo),
-                ('TEXTCOLOR', (0,0), (-1, 0), color_texto),
+                ('BACKGROUND',    (0,0), (-1, 0), color_fondo),
+                ('TEXTCOLOR',     (0,0), (-1, 0), color_texto_enc),
                 ('LEADING',       (0,0), (-1,-1), font_size + 1),
                 ('TOPPADDING',    (0,0), (-1,-1), 1),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 1),
@@ -445,11 +452,42 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
                 ('RIGHTPADDING',  (0,0), (-1,-1), 1),
                 ('GRID',          (0,0), (-1,-1), 0.7, colors.black)
             ]))
-
-            if not es_primer_tabla:
-                elementos.append(PageBreak())
             elementos.append(tabla)
-            es_primer_tabla = False
+            return
 
-    doc.build(elementos)
+        nivel_actual = niveles_restantes[0]
+        resto = niveles_restantes[1:]
+
+        # Respetar orden del filtro
+        if nivel_actual['filtro']:
+            orden_grupos = [g for g in nivel_actual['filtro'] if g in df[nivel_actual['col']].values]
+        else:
+            orden_grupos = df[nivel_actual['col']].unique().tolist()
+
+        for idx, grupo_val in enumerate(orden_grupos):
+            filas_grupo = df[df[nivel_actual['col']] == grupo_val]
+
+            if filas_grupo.empty:
+                continue
+
+            if profundidad == 0 and idx > 0:
+                elementos.append(PageBreak())
+            elif profundidad > 0 and idx > 0:
+                elementos.append(Spacer(1, 6))
+
+            fs_titulo = (font_size + 3) if profundidad == 0 else (font_size + 1)
+            estilo_grupo = ParagraphStyle(
+                f'grupo_{profundidad}',
+                fontSize=fs_titulo,
+                fontName='Helvetica-Bold',
+                leading=fs_titulo + 3,
+                spaceAfter=2
+            )
+            elementos.append(Paragraph(str(grupo_val).upper(), estilo_grupo))
+            generar_tablas(filas_grupo, resto, profundidad + 1)
+
+    elementos = []
+    generar_tablas(df_final, niveles, profundidad=0)
+    doc.build(elementos) 
+
     return pdf_path

@@ -12,6 +12,13 @@ interface ColumnaItem {
   seleccionada: boolean; 
 }
 
+interface AgrupacionItem {
+  columna: number;
+  valores: string[];
+  seleccionados: boolean[];
+  busqueda: ''
+}
+
 @Component({
   selector: 'app-configurar-personalizado',
   standalone: true,
@@ -27,13 +34,11 @@ export class ConfigurarPersonalizado implements OnInit {
 
   filaInicio = 23;
   orientacion: 'portrait' | 'landscape' = 'landscape';
-  columnaAgrupacion = 0;
-  columnaAgrupacion2 = -1; // -1 = sin segunda agrupación
+  
   generando = false;
   incluirComentarios = false;
   nombreEmpresa = ''; 
-  valoresAgrupacion: string[] = [];
-  valoresAgrupacionSeleccionados: boolean[] = [];
+  agrupaciones: AgrupacionItem[] = [];
 
    // Enfilamiento
   enfilarPdfs = false;
@@ -47,7 +52,7 @@ export class ConfigurarPersonalizado implements OnInit {
   usarNomenclaturaDefault = false;
   tieneNomenclaturaEnExcel = false;
   tamanoLetra = 0; 
-  tipoPeriodo: 'semana' | 'quincena' | 'ninguno' = 'ninguno';
+  tipoPeriodo: 'semana' | 'quincena' | 'quincena_1' | 'quincena_2' | 'ninguno' = 'ninguno';
 
   // Logo
   logoArchivo: File | null = null;
@@ -89,7 +94,7 @@ export class ConfigurarPersonalizado implements OnInit {
       this.archivoNombre = state.archivoNombre;
       this.inicializarColumnas();
       this.detectarNomenclatura();
-      this.detectarValoresAgrupacion();
+      this.agregarAgrupacion(); // inicia con una agrupación por defecto
     }
   }
 
@@ -97,6 +102,7 @@ export class ConfigurarPersonalizado implements OnInit {
     return this.columnas.filter(c => c.seleccionada);
   }
 
+  
   abreviarTitulo(texto: string): string {
     const abrevs: { [key: string]: string } = {
       'nombre del colaborador': 'Nombre',
@@ -162,40 +168,70 @@ export class ConfigurarPersonalizado implements OnInit {
     this.cdr.detectChanges();
   }
 
-    detectarValoresAgrupacion() {
-    const columnaParaFiltrar = this.columnaAgrupacion2 >= 0 
-      ? this.columnaAgrupacion2 
-      : this.columnaAgrupacion;
+  
+agregarAgrupacion() {
+  const primeraColumna = this.columnasDisponiblesParaAgrupar()[0];
+  if (!primeraColumna) return;
 
-    if (columnaParaFiltrar < 0) {
-      this.valoresAgrupacion = [];
-      this.valoresAgrupacionSeleccionados = [];
-      return;
-      }
+  const nuevaAgrupacion: AgrupacionItem = {
+    columna: primeraColumna.index,
+    valores: [],
+    seleccionados: [],
+    busqueda: ''
+  };
+  this.agrupaciones.push(nuevaAgrupacion);
+  this.detectarValoresPorAgrupacion(this.agrupaciones.length - 1);
+  this.cdr.detectChanges();
+}
+seleccionarTodos(i: number) {
+  this.agrupaciones[i].seleccionados =
+    this.agrupaciones[i].valores.map(() => true);
+}
 
-      const filaIdx = this.filaInicio;
-      const filasData = this.filas.slice(filaIdx);
-      const valoresUnicos = new Set<string>();
+limpiarSeleccion(i: number) {
+  this.agrupaciones[i].seleccionados =
+    this.agrupaciones[i].valores.map(() => false);
+}
+eliminarAgrupacion(i: number) {
+  this.agrupaciones.splice(i, 1);
+  this.cdr.detectChanges();
+}
 
-      for (const fila of filasData) {
-        const val = fila[columnaParaFiltrar];
-        if (val !== undefined && val !== null && String(val).trim() !== '') {
-          valoresUnicos.add(String(val).trim());
-        }
-      }
+onCambioColumnaAgrupacion(i: number) {
+  this.detectarValoresPorAgrupacion(i);
+  this.cdr.detectChanges();
+}
 
-      this.valoresAgrupacion = Array.from(valoresUnicos).sort();
-      this.valoresAgrupacionSeleccionados = this.valoresAgrupacion.map(() => true);
-      this.cdr.detectChanges();
+detectarValoresPorAgrupacion(i: number) {
+  const agrupacion = this.agrupaciones[i];
+  if (!agrupacion) return;
+
+  const filaIdx = this.filaInicio;
+  const filasData = this.filas.slice(filaIdx);
+  const valoresUnicos = new Set<string>();
+
+  for (const fila of filasData) {
+    const val = fila[agrupacion.columna];
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+      valoresUnicos.add(String(val).trim().normalize('NFC'));
     }
-
-  toggleValorAgrupacion(i: number) {
-    this.valoresAgrupacionSeleccionados[i] = !this.valoresAgrupacionSeleccionados[i];
   }
 
-  valoresAgrupacionElegidos(): string[] {
-    return this.valoresAgrupacion.filter((_, i) => this.valoresAgrupacionSeleccionados[i]);
-  }
+  agrupacion.valores = Array.from(valoresUnicos).sort((a, b) =>
+    a.localeCompare(b, 'es', { sensitivity: 'base' })
+  );
+  agrupacion.seleccionados = agrupacion.valores.map(() => true);
+}
+
+toggleValorAgrupacion(idxAgrupacion: number, idxValor: number) {
+  this.agrupaciones[idxAgrupacion].seleccionados[idxValor] =
+    !this.agrupaciones[idxAgrupacion].seleccionados[idxValor];
+}
+
+valoresElegidosPorAgrupacion(i: number): string[] {
+  const agrupacion = this.agrupaciones[i];
+  return agrupacion.valores.filter((_, j) => agrupacion.seleccionados[j]);
+}
   moverColumna(index: number, direccion: number) {
     const nuevaPos = index + direccion;
     if (nuevaPos < 0 || nuevaPos >= this.columnas.length) return;
@@ -293,6 +329,7 @@ export class ConfigurarPersonalizado implements OnInit {
            !!this.archivoTemp.archivo;
   }
 
+  
   generarPdf() {
   if (!this.camposValidos()) return;
   this.generando = true;
@@ -304,14 +341,11 @@ export class ConfigurarPersonalizado implements OnInit {
   formData.append('fila_inicio', String(this.filaInicio));
   formData.append('orientacion', this.orientacion);
   formData.append('columnas', JSON.stringify(this.columnasElegidas()));
-  formData.append('columna_agrupacion', String(this.columnaAgrupacion));
   formData.append('nomenclatura', JSON.stringify(this.nomenclaturaElegida()));
   formData.append('incluir_comentarios', String(this.incluirComentarios));
   formData.append('nombre_empresa', this.nombreEmpresa);
   formData.append('tamano_letra', String(this.tamanoLetra));
   formData.append('tipo_periodo', this.tipoPeriodo);
-  formData.append('columna_agrupacion2', String(this.columnaAgrupacion2));
-  formData.append('filtro_agrupacion', JSON.stringify(this.valoresAgrupacionElegidos()));
   formData.append('color_titulo', this.colorTitulo);
   formData.append('color_encabezado', this.colorEncabezado);
 
@@ -319,6 +353,13 @@ export class ConfigurarPersonalizado implements OnInit {
   formData.append('logo', this.logoArchivo);
   } 
   formData.append('posicion_logo', this.posicionLogo);
+
+  const agrupacionesPayload = this.agrupaciones.map((a, i) => ({
+    columna: a.columna,
+    filtro: this.valoresElegidosPorAgrupacion(i)
+  }));
+  formData.append('agrupaciones', JSON.stringify(agrupacionesPayload));
+
   this.apiService.generarPdfPersonalizado(formData).subscribe({
     next: (blob) => {
       if (this.enfilarPdfs) {
@@ -345,6 +386,9 @@ export class ConfigurarPersonalizado implements OnInit {
       this.cdr.detectChanges();
     }
   });
+
+  
+
 }
 
   descargarTodo() {
@@ -390,6 +434,15 @@ export class ConfigurarPersonalizado implements OnInit {
       return '12px'; // automático visual
     }
     return this.tamanoLetra + 'px';
+  }
+
+    onCambioPeriodo() {
+    if (this.tipoPeriodo === 'semana' || this.tipoPeriodo === 'ninguno') {
+      return;
+    }
+
+    if (this.tipoPeriodo === 'quincena') return;
+
   }
 
   eliminarDeCola(i: number) {

@@ -38,7 +38,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (fila of filas; track $index) {
+            @for (fila of filas.slice(0, 50); track $index) {
               <tr>
                 @for (celda of fila; track $index) {
                   <td>{{ celda }}</td>

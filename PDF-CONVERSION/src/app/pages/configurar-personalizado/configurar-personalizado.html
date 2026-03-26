@@ -59,57 +59,85 @@
           <input type="number" [(ngModel)]="filaInicio" min="1"
             (ngModelChange)="onFilaInicioChange()" />
         </div>
-        <div class="campo">
-      <label>Tipo de periodo</label>
-      <div class="radio-group">
         <label class="radio-option">
-          <input type="radio" [(ngModel)]="tipoPeriodo" value="ninguno" />
-          Sin filtro
+        <input type="radio" [(ngModel)]="tipoPeriodo" value="ninguno" />
+        Sin filtro
         </label>
         <label class="radio-option">
-          <input type="radio" [(ngModel)]="tipoPeriodo" value="semana" />
-          Semana (7 días)
+        <input type="radio" [(ngModel)]="tipoPeriodo" value="semana" (change)="onCambioPeriodo()" />
+          Semana
         </label>
+
         <label class="radio-option">
-          <input type="radio" [(ngModel)]="tipoPeriodo" value="quincena" />
+        <input type="radio" [(ngModel)]="tipoPeriodo" value="quincena" (change)="onCambioPeriodo()" />
           Quincena (15 días)
         </label>
-      </div>
-    </div>
-        <div class="campo">
-          <label>Agrupar por columna</label>
-         <select [(ngModel)]="columnaAgrupacion" (ngModelChange)="detectarValoresAgrupacion()">
-            @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
-              <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
-            }
-          </select>
-        </div>
-          <div class="campo">
-          <label>Agrupar también por (opcional)</label>
-         <select [(ngModel)]="columnaAgrupacion2" (ngModelChange)="detectarValoresAgrupacion()">
-          <option [ngValue]="-1">— Sin segunda agrupación —</option>
-          @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
-            <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
-          }
-        </select>
 
-      @if (valoresAgrupacion.length > 0) {
-          <div class="campo">
-            <label>Filtrar grupos a incluir</label>
-            <p class="hint">Deselecciona los que no quieres en el PDF</p>
-            <div class="chips">
-              @for (val of valoresAgrupacion; track val; let i = $index) {
-                <div class="chip" [class.activo]="valoresAgrupacionSeleccionados[i]"
-                  (click)="toggleValorAgrupacion(i)">
-                  <span class="chip-nombre">{{ val }}</span>
-                </div>
-              }
-            </div>
+        @if (tipoPeriodo === 'quincena' || tipoPeriodo === 'quincena_1' || tipoPeriodo === 'quincena_2') {
+
+          <div style="margin-left: 20px;">
+            
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="tipoPeriodo" value="quincena_1" />
+              1ª semana (días 1–7)
+            </label>
+
+            <label class="radio-option">
+              <input type="radio" [(ngModel)]="tipoPeriodo" value="quincena_2" />
+              2ª semana (días 8–15)
+            </label>
+
           </div>
         }
-            
-        </div>
+
+       @for (agrup of agrupaciones; track $index; let i = $index) {
+  <div class="campo agrupacion-bloque">
+
+    <div class="agrupacion-header">
+      <label>Agrupar por columna {{ i + 1 }}</label>
+      <button (click)="eliminarAgrupacion(i)">✕ Quitar</button>
+    </div>
+
+    <select [(ngModel)]="agrup.columna" (ngModelChange)="onCambioColumnaAgrupacion(i)">
+      @for (col of columnasDisponiblesParaAgrupar(); track col.index) {
+        <option [ngValue]="col.index">{{ col.letra }} — {{ col.nombre }}</option>
+      }
+    </select>
+
+    @if (agrup.valores.length > 10) {
+      <input
+        type="text"
+        placeholder="Buscar..."
+        [(ngModel)]="agrup.busqueda"
+      />
+
+      <div>
+        <button (click)="seleccionarTodos(i)">Todos</button>
+        <button (click)="limpiarSeleccion(i)">Ninguno</button>
       </div>
+    }
+
+    <div class="chips">
+      @for (val of agrup.valores; track val; let j = $index) {
+        @if (!agrup.busqueda || (val + '').toLowerCase().includes((agrup.busqueda + '').toLowerCase())) {
+          <div class="chip"
+              [class.activo]="agrup.seleccionados[j]"
+              (click)="toggleValorAgrupacion(i, j)">
+            <span class="chip-nombre">{{ val }}</span>
+          </div>
+        }
+      }
+    </div>
+
+  </div>
+}
+
+<button class="btn-agregar-agrupacion" (click)="agregarAgrupacion()">
+  + Agregar agrupación
+</button>
+
+        </div>
+
 
       <div class="fila-doble">
         <div class="campo">
@@ -206,7 +234,7 @@
         <input type="checkbox" [(ngModel)]="enfilarPdfs" />
         <span class="slider"></span>
       </label>
-      <span class="toggle-label">{{ enfilarPdfs ? 'Modo cola activado' : 'Descargar directo' }}</span>
+      <span class="toggle-label">{{ enfilarPdfs ? 'Modo fila activado' : 'Descargar directo' }}</span>
     </div>
 
     <button class="btn-generar"
@@ -224,7 +252,7 @@
     <!-- Cola de PDFs -->
     @if (colaPdfs.length > 0) {
       <div class="cola-pdfs">
-        <h4>Cola de PDFs ({{ colaPdfs.length }})</h4>
+        <h4>Fila de PDFs ({{ colaPdfs.length }})</h4>
         @for (item of colaPdfs; track $index; let i = $index) {
           <div class="cola-item">
             <span>📄 {{ item.nombre }}</span>

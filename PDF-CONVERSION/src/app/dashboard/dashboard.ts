@@ -73,7 +73,7 @@ export class Dashboard {
 
     const json: any[][] = XLSX.utils.sheet_to_json(hoja, { header: 1 });
     if (json.length > 0) {
-      this.filas = json.slice(0, 50);
+      this.filas = json; // ← todas las filas
     }
 
     this.cargando = false;
