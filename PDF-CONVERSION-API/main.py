@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -8,6 +8,14 @@ import json
 from pypdf import PdfWriter, PdfReader 
 from services.pdf_kardex import generar_kardex
 from services.pdf_personalizado import generar_personalizado
+from database import engine
+from sqlalchemy import text
+from fastapi.security import OAuth2PasswordRequestForm
+from auth import hashear_password, verificar_password, crear_token, get_usuario_actual
+from database import get_db
+from sqlalchemy.orm import Session
+
+
 
 app = FastAPI()
 
@@ -65,7 +73,7 @@ async def generar_pdf(
         cols = json.loads(columnas)
         nomenc = json.loads(nomenclatura) if nomenclatura else []
         comentarios = incluir_comentarios == 'true'
-        fila_inicio_val = fila_inicio if fila_inicio else 23
+        fila_inicio_val = fila_inicio if fila_inicio else 1
         agrupaciones_list = json.loads(agrupaciones) if agrupaciones else []
 
         
@@ -74,7 +82,7 @@ async def generar_pdf(
             fila_inicio_val,
             orientacion,
             cols,
-            agrupaciones_list,      # <-- nuevo
+            agrupaciones_list,      
             nomenc,
             comentarios,
             nombre_empresa or 'REPORTE DE ASISTENCIA',
@@ -118,3 +126,27 @@ async def combinar_pdfs(archivos: list[UploadFile] = File(...)):
         writer.write(f)
 
     return FileResponse(tmp_out.name, media_type="application/pdf", filename="reporte_completo.pdf")
+
+@app.get("/test-db")
+def test_db():
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+        return {"db": "conectada "}
+    
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    resultado = db.execute(
+        text("SELECT * FROM usuarios WHERE username = :username"),
+        {"username": form_data.username}
+    ).fetchone()
+    
+    if not resultado or not verificar_password(form_data.password, resultado.password_hash):
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    
+    token = crear_token({"sub": resultado.username})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@app.get("/me")
+def me(usuario: str = Depends(get_usuario_actual)):
+    return {"usuario": usuario}

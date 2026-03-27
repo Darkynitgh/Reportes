@@ -32,7 +32,7 @@ export class ConfigurarPersonalizado implements OnInit {
   filas: any[][] = [];
   archivoNombre = '';
 
-  filaInicio = 23;
+  filaInicio = 1;
   orientacion: 'portrait' | 'landscape' = 'landscape';
   
   generando = false;
@@ -42,7 +42,7 @@ export class ConfigurarPersonalizado implements OnInit {
 
    // Enfilamiento
   enfilarPdfs = false;
-  colaPdfs: { nombre: string; blob: Blob }[] = [];
+  filaPdfs: { nombre: string; blob: Blob }[] = [];
   descargandoTodo = false;
   // Nomenclatura
   filaNomenclaturaInicio = 7;
@@ -163,6 +163,7 @@ export class ConfigurarPersonalizado implements OnInit {
   }
 
   onFilaInicioChange() {
+    if (!this.filaInicio || this.filaInicio < 1) return;
     this.inicializarColumnas();
     this.cdr.detectChanges();
     this.cdr.detectChanges();
@@ -367,7 +368,7 @@ valoresElegidosPorAgrupacion(i: number): string[] {
         const nombre = this.nombreEmpresa
           ? `${this.nombreEmpresa}_reporte.pdf`
           : `${this.archivoNombre}_reporte.pdf`;
-        this.colaPdfs.push({ nombre, blob });
+        this.filaPdfs.push({ nombre, blob });
       } else {
         // Descargar directo como antes
         const url = window.URL.createObjectURL(blob);
@@ -387,16 +388,28 @@ valoresElegidosPorAgrupacion(i: number): string[] {
     }
   });
 
-  
 
 }
 
+
+  etiquetaAgrupacionPreview(): string {
+    if (this.agrupaciones.length === 0) return '';
+    return this.agrupaciones
+      .map(a => {
+        const col = this.columnas.find(c => c.indiceOriginal === a.columna);
+        const nombre = col?.nombre ?? `Col ${a.columna}`;
+        const seleccionados = a.valores.filter((_, j) => a.seleccionados[j]);
+        const valor = seleccionados.length > 0 ? seleccionados[0] : '(sin selección)';
+        return `${nombre}: ${valor}`;
+      })
+      .join(' | ');
+  }
   descargarTodo() {
-    if (this.colaPdfs.length === 0) return;
+    if (this.filaPdfs.length === 0) return;
     this.descargandoTodo = true;
     this.cdr.detectChanges();
     
-    const blobs = this.colaPdfs.map(p => p.blob);
+    const blobs = this.filaPdfs.map(p => p.blob);
     
     this.apiService.combinarPdfs(blobs).subscribe({
       next: (blob) => {
@@ -406,7 +419,7 @@ valoresElegidosPorAgrupacion(i: number): string[] {
         link.download = 'reporte_completo.pdf';
         link.click();
         window.URL.revokeObjectURL(url);
-        this.colaPdfs = [];
+        this.filaPdfs = [];
         this.descargandoTodo = false;
         this.cdr.detectChanges();
       },
@@ -445,7 +458,7 @@ valoresElegidosPorAgrupacion(i: number): string[] {
 
   }
 
-  eliminarDeCola(i: number) {
-    this.colaPdfs.splice(i, 1);
+    eliminarDeFila(i: number) {
+    this.filaPdfs.splice(i, 1);
   }
 }

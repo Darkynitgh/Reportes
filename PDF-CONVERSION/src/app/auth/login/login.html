@@ -5,14 +5,16 @@
 
     <div class="campo">
       <label>Usuario</label>
-      <input type="text" [(ngModel)]="usuario" placeholder="usuario@correo.com" />
+      <input type="text" [(ngModel)]="usuario" placeholder="usuario@correo.com" (keydown.enter)="ingresar()" />
     </div>
 
     <div class="campo">
       <label>Contraseña</label>
-      <input type="password" [(ngModel)]="password" placeholder="••••••••" />
+      <input type="password" [(ngModel)]="password" placeholder="••••••••" (keydown.enter)="ingresar()" />
     </div>
-
+    @if (error) {
+      <p style="color:red; font-size:13px;">{{ error }}</p>
+    }
     <button class="btn-ingresar" (click)="ingresar()">Ingresar</button>
   </div>
 </div>

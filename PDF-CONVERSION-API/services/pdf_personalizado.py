@@ -110,10 +110,16 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
     pdf_path = tmp.name
     tmp.close()
 
+    if fila_inicio < 1 or fila_inicio > len(df_raw):
+        raise ValueError(
+            f"fila_inicio={fila_inicio} está fuera de rango. "
+            f"El archivo tiene {len(df_raw)} filas."
+        )
     # EXTRAER DATOS
     encabezados_raw = df_raw.iloc[fila_inicio - 1].tolist()
     datos_raw = df_raw.iloc[fila_inicio:].values.tolist()
 
+    
     encabezados_raw = [str(v) if pd.notna(v) and str(v) != 'nan' else f'Col{i}'
                        for i, v in enumerate(encabezados_raw)]
 
@@ -412,11 +418,27 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
     df_final = df_final.reset_index(drop=True)
 
         # Funcion recursiva para agrupar y generar tablas
-    def generar_tablas(df, niveles_restantes, profundidad=0):
+    def generar_tablas(df, niveles_restantes, profundidad=0, ruta_actual=None):
+        if ruta_actual is None:     
+            ruta_actual = [] 
         if df.empty:
             return
 
         if not niveles_restantes:
+
+            if ruta_actual and elementos:
+                elementos.append(PageBreak())
+            if ruta_actual:
+                etiqueta = ' | '.join(f"{col}: {val}" for col, val in ruta_actual)
+                estilo_etiqueta = ParagraphStyle(
+                    'etiqueta_grupo',
+                    fontSize=font_size + 2,
+                    fontName='Helvetica-Bold',
+                    leading=font_size + 5,
+                    spaceAfter=2
+                )
+                elementos.append(Paragraph(etiqueta, estilo_etiqueta))
+
             encabezados_tabla = [abreviar_encabezado(e) for e in encabezados]
             if incluir_comentarios:
                 encabezados_tabla.append('Comentarios')
@@ -470,21 +492,17 @@ def generar_personalizado(df_raw, fila_inicio, orientacion, columnas,
             if filas_grupo.empty:
                 continue
 
-            if profundidad == 0 and idx > 0:
-                elementos.append(PageBreak())
-            elif profundidad > 0 and idx > 0:
-                elementos.append(Spacer(1, 6))
-
-            fs_titulo = (font_size + 3) if profundidad == 0 else (font_size + 1)
-            estilo_grupo = ParagraphStyle(
-                f'grupo_{profundidad}',
-                fontSize=fs_titulo,
-                fontName='Helvetica-Bold',
-                leading=fs_titulo + 3,
-                spaceAfter=2
-            )
-            elementos.append(Paragraph(str(grupo_val).upper(), estilo_grupo))
-            generar_tablas(filas_grupo, resto, profundidad + 1)
+            # if profundidad == 0 and idx > 0:
+            #     elementos.append(PageBreak())
+            # elif profundidad > 0 and idx > 0:
+            #     elementos.append(Spacer(1, 6))
+                
+            generar_tablas(
+                                filas_grupo,
+                                resto,
+                                profundidad + 1,
+                                ruta_actual + [(nivel_actual['col'], grupo_val)]
+                            )
 
     elementos = []
     generar_tablas(df_final, niveles, profundidad=0)

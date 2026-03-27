@@ -354,6 +354,12 @@
   aspect-ratio: 8.5 / 11; /* vertical carta */
 }
 
+.prev-etiqueta-grupo {
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #1e1b4b;
+}
 .preview-contenido.landscape {
   aspect-ratio: 11 / 8.5; /* horizontal carta */
 }
@@ -464,7 +470,7 @@
   text-align: center;
 }
 
-.cola-pdfs {
+.fila-pdfs {
   margin-top: 1rem;
   background: #f5f3ff;
   border: 1px solid #c4b5fd;
@@ -472,13 +478,13 @@
   padding: 1rem;
 }
 
-.cola-pdfs h4 {
+.fila-pdfs h4 {
   margin: 0 0 0.75rem;
   color: #4f46e5;
   font-size: 0.9rem;
 }
 
-.cola-item {
+.fila-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -490,7 +496,7 @@
   color: #374151;
 }
 
-.btn-eliminar-cola {
+.btn-eliminar-fila {
   background: none;
   border: none;
   color: #ef4444;

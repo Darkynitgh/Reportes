@@ -228,7 +228,7 @@
       <p class="advertencia">No hay archivo cargado.</p>
     }
 
-    <!-- Toggle enfilar -->
+        <!-- Toggle enfilar -->
     <div class="toggle-wrapper" style="margin-bottom: 1rem;">
       <label class="toggle">
         <input type="checkbox" [(ngModel)]="enfilarPdfs" />
@@ -243,20 +243,20 @@
       @if (generando) {
         Generando PDF...
       } @else if (enfilarPdfs) {
-        Agregar a cola  
+        Agregar a fila
       } @else {
-        Generar PDF 
+        Generar PDF
       }
     </button>
 
-    <!-- Cola de PDFs -->
-    @if (colaPdfs.length > 0) {
-      <div class="cola-pdfs">
-        <h4>Fila de PDFs ({{ colaPdfs.length }})</h4>
-        @for (item of colaPdfs; track $index; let i = $index) {
-          <div class="cola-item">
+    <!-- Fila de PDFs -->
+    @if (filaPdfs.length > 0) {
+      <div class="fila-pdfs">
+        <h4>Fila de PDFs ({{ filaPdfs.length }})</h4>
+        @for (item of filaPdfs; track $index; let i = $index) {
+          <div class="fila-item">
             <span>📄 {{ item.nombre }}</span>
-            <button class="btn-eliminar-cola" (click)="eliminarDeCola(i)">✕</button>
+            <button class="btn-eliminar-fila" (click)="eliminarDeFila(i)">✕</button>
           </div>
         }
         <button class="btn-descargar-todo"
@@ -304,6 +304,11 @@
       }
 
       <!-- Tabla -->
+            @if (agrupaciones.length > 0) {
+        <div class="prev-etiqueta-grupo">
+          {{ etiquetaAgrupacionPreview() }}
+        </div>
+      }
       <div class="prev-tabla-wrapper">
         <table class="prev-tabla"
        [style.fontSize]="getFontSizePreview()">
